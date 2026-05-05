@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gymcam</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow:wght@300;500;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:      #080a0d;
+      --surface: #0f1117;
+      --card:    #141720;
+      --border:  #1c2030;
+      --accent:  #e8ff47;
+      --red:     #ff3535;
+      --blue:    #2255ff;
+      --dim:     #353a50;
+      --muted:   #5a617a;
+      --text:    #c4cedf;
+      --mono:    'Share Tech Mono', monospace;
+      --sans:    'Barlow', sans-serif;
+    }
+    html, body { height: 100%; overflow: hidden; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      font-weight: 300;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ══ TOP BAR ══ */
+    #topbar {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 0 20px;
+      height: 48px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .logo { font-family: var(--mono); font-size: 1rem; letter-spacing: .14em; color: var(--accent); }
+    .logo em { color: var(--dim); font-style: normal; }
+
+    #mode-badge {
+      font-family: var(--mono);
+      font-size: .72rem;
+      letter-spacing: .12em;
+      padding: 3px 12px;
+      border-radius: 2px;
+      transition: background .25s, color .25s;
+    }
+    #mode-badge.live      { background: var(--dim);  color: var(--accent); }
+    #mode-badge.recording { background: var(--red);  color: #fff; }
+    #mode-badge.playback  { background: var(--blue); color: #fff; }
+    #mode-badge.paused    { background: #13183a; color: #6e8fff; border: 1px solid #2a3a7a; }
+
+    #rec-dot {
+      display: none;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--red);
+      animation: blink 1s step-start infinite;
+    }
+    @keyframes blink { 50% { opacity: 0; } }
+
+    #rec-clock { font-family: var(--mono); font-size: .9rem; color: var(--red); display: none; }
+    #pb-time   { font-family: var(--mono); font-size: .82rem; color: var(--text); display: none; }
+    #speed-badge {
+      font-family: var(--mono); font-size: .68rem;
+      color: var(--accent); background: rgba(232,255,71,.1);
+      padding: 2px 8px; border-radius: 2px; display: none;
+    }
+    #cam-label  { font-family: var(--mono); font-size: .72rem; color: var(--muted); margin-left: auto; }
+    #disk-info  { font-family: var(--mono); font-size: .65rem; color: var(--dim); }
+    #disk-info.warn { color: var(--red); }
+
+    /* ══ LAYOUT ══ */
+    #layout {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 220px;
+      min-height: 0;
+    }
+
+    /* ══ VIEWER ══ */
+    #viewer {
+      position: relative;
+      background: #000;
+      overflow: hidden;
+    }
+
+    #grid-view {
+      display: none; width: 100%; height: 100%;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: 1fr 1fr;
+      gap: 2px;
+    }
+    #grid-view.on { display: grid; }
+    .grid-cell { position: relative; background: #04060a; overflow: hidden; cursor: pointer; }
+    .grid-cell img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .grid-label {
+      position: absolute; bottom: 8px; left: 10px;
+      font-family: var(--mono); font-size: .6rem;
+      color: rgba(232,255,71,.65); letter-spacing: .07em;
+      pointer-events: none; opacity: 0; transition: opacity .15s;
+    }
+    .grid-cell:hover .grid-label { opacity: 1; }
+    .grid-border {
+      position: absolute; inset: 0;
+      border: 2px solid transparent; pointer-events: none;
+      transition: border-color .12s;
+    }
+    .grid-cell:hover .grid-border { border-color: rgba(232,255,71,.28); }
+
+    #single-view { display: none; width: 100%; height: 100%; }
+    #single-view.on { display: flex; align-items: center; justify-content: center; }
+    #live-img { width: 100%; height: 100%; object-fit: contain; display: block; }
+
+    #pb-video {
+      display: none; position: absolute; inset: 0;
+      width: 100%; height: 100%; object-fit: contain; background: #000;
+    }
+    #pb-video.on { display: block; }
+
+    #prog-wrap {
+      display: none; position: absolute; bottom: 0; left: 0; right: 0; height: 3px;
+      background: rgba(255,255,255,.07);
+    }
+    #prog-wrap.on { display: block; }
+    #prog-bar { height: 100%; background: var(--blue); width: 0%; transition: width .4s linear; }
+
+    /* ══ SIDEBAR ══ */
+    #sidebar {
+      display: flex; flex-direction: column;
+      background: var(--surface); border-left: 1px solid var(--border); overflow: hidden;
+    }
+    #cam-section { flex-shrink: 0; padding: 12px 10px 6px; }
+    .s-lbl {
+      font-family: var(--mono); font-size: .58rem; letter-spacing: .15em;
+      color: var(--dim); text-transform: uppercase; margin-bottom: 6px; padding: 0 2px;
+    }
+    #cam-list { display: flex; flex-direction: column; gap: 2px; }
+    .cam-row {
+      display: flex; align-items: center; gap: 8px;
+      padding: 7px 10px; border: 1px solid var(--border); border-radius: 3px;
+      cursor: pointer; transition: background .1s, border-color .1s;
+      background: transparent; color: var(--text);
+      font-family: var(--mono); font-size: .74rem; text-align: left; width: 100%;
+    }
+    .cam-row:hover { background: var(--card); }
+    .cam-row.active { border-color: var(--accent); color: var(--accent); }
+    .cam-key {
+      font-size: .58rem; background: var(--border); padding: 1px 5px;
+      border-radius: 2px; color: var(--muted); flex-shrink: 0;
+    }
+    .cam-row.active .cam-key { background: rgba(232,255,71,.12); color: var(--accent); }
+
+    .div { border: none; border-top: 1px solid var(--border); margin: 4px 0; flex-shrink: 0; }
+
+    /* Keymap */
+    #keymap { flex: 1; padding: 8px 12px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+    .km-row { display: flex; align-items: center; gap: 8px; }
+    .km-key {
+      font-family: var(--mono); font-size: .63rem;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 3px; padding: 3px 7px;
+      color: var(--text); min-width: 30px; text-align: center; flex-shrink: 0;
+    }
+    .km-key.a { border-color: var(--accent); color: var(--accent); }
+    .km-key.r { border-color: var(--red);    color: var(--red); }
+    .km-key.b { border-color: #2a50cc;        color: #6e8fff; }
+    .km-desc { font-size: .7rem; color: var(--muted); line-height: 1.3; }
+
+    /* Error */
+    #error-bar {
+      display: none; background: var(--red); color: #fff;
+      font-family: var(--mono); font-size: .74rem;
+      padding: 6px 16px; text-align: center; flex-shrink: 0;
+    }
+  </style>
+</head>
+<body>
+
+<div id="error-bar"></div>
+
+<div id="topbar">
+  <div class="logo">GYM<em>/</em>CAM</div>
+  <div id="mode-badge" class="live">LIVE</div>
+  <div id="rec-dot"></div>
+  <div id="rec-clock">00:00:00</div>
+  <div id="pb-time">0:00 / 0:00</div>
+  <div id="speed-badge">1×</div>
+  <div id="cam-label">GRID</div>
+  <div id="disk-info">disk: —</div>
+</div>
+
+<div id="layout">
+
+  <div id="viewer">
+    <div id="grid-view" class="on">
+      <% config.forEach((cam, i) => { %>
+      <div class="grid-cell" data-cam="<%= i + 1 %>">
+        <img id="grid-img-<%= i %>" alt="<%= cam.name %>" />
+        <div class="grid-label">CAM <%= i+1 %> — <%= cam.name %></div>
+        <div class="grid-border"></div>
+      </div>
+      <% }) %>
+    </div>
+    <div id="single-view"><img id="live-img" alt="Live" /></div>
+    <video id="pb-video" preload="auto"></video>
+    <div id="prog-wrap"><div id="prog-bar"></div></div>
+  </div>
+
+  <div id="sidebar">
+    <div id="cam-section">
+      <div class="s-lbl">Kameror</div>
+      <div id="cam-list">
+        <button class="cam-row active" data-cam="0">
+          <span class="cam-key">0</span><span>GRID</span>
+        </button>
+        <% config.forEach((cam, i) => { %>
+        <button class="cam-row" data-cam="<%= i + 1 %>">
+          <span class="cam-key"><%= i + 1 %></span><span><%= cam.name %></span>
+        </button>
+        <% }) %>
+      </div>
+    </div>
+    <div class="div"></div>
+    <div id="keymap"></div>
+  </div>
+</div>
+
+<script>
+const CAM_COUNT = <%= config.length %>
+const CAM_NAMES = <%- JSON.stringify(config.map(c => c.name)) %>
+
+// ── State ─────────────────────────────────────────────
+let mode       = 'LIVE'
+let activeCam  = 0
+let serverFiles = []
+let recStart   = null
+let recTimerID = null
+let speedIdx   = 2          // index into SPEEDS
+let loadedFile = null       // currently loaded video src
+
+const SPEEDS = [0.25, 0.5, 1, 1.5, 2]
+
+// ── DOM ───────────────────────────────────────────────
+const modeBadge = document.getElementById('mode-badge')
+const recDot    = document.getElementById('rec-dot')
+const recClock  = document.getElementById('rec-clock')
+const pbTime    = document.getElementById('pb-time')
+const speedBadge= document.getElementById('speed-badge')
+const camLabel  = document.getElementById('cam-label')
+const diskInfo  = document.getElementById('disk-info')
+const errorBar  = document.getElementById('error-bar')
+const gridView  = document.getElementById('grid-view')
+const singleView= document.getElementById('single-view')
+const liveImg   = document.getElementById('live-img')
+const pbVideo   = document.getElementById('pb-video')
+const progWrap  = document.getElementById('prog-wrap')
+const progBar   = document.getElementById('prog-bar')
+const keymap    = document.getElementById('keymap')
+
+// ── SSE ───────────────────────────────────────────────
+new EventSource('/state-stream').onmessage = e => {
+  const s = JSON.parse(e.data)
+  const prevMode = mode
+  mode        = s.mode
+  serverFiles = s.files || []
+
+  errorBar.style.display = s.error ? 'block' : 'none'
+  if (s.error) errorBar.textContent = s.error
+
+  // Recording clock
+  if (mode === 'RECORDING') {
+    recStart = s.recordingStart
+    if (!recTimerID) recTimerID = setInterval(tickClock, 1000)
+  } else {
+    clearInterval(recTimerID)
+    recTimerID = null
+  }
+
+  // Entering PLAYBACK fresh → load first file and play
+  if (mode === 'PLAYBACK' && prevMode !== 'PLAYBACK' && prevMode !== 'PAUSED') {
+    speedIdx = 2
+    const c0 = activeCam > 0 ? activeCam - 1 : 0
+    loadPbCam(c0, true, 0)
+  }
+
+  // Returning to LIVE → stop video, restore live feeds
+  if ((mode === 'LIVE' || mode === 'RECORDING') && prevMode !== 'LIVE' && prevMode !== 'RECORDING') {
+    pbVideo.pause()
+    pbVideo.removeAttribute('src')
+    loadedFile = null
+    pbVideo.classList.remove('on')
+    progWrap.classList.remove('on')
+    applyLiveView(activeCam)
+  }
+
+  renderUI()
+}
+
+// ── Render ────────────────────────────────────────────
+function renderUI() {
+  const isPb = mode === 'PLAYBACK' || mode === 'PAUSED'
+
+  const labels = { LIVE:'LIVE', RECORDING:'SPELAR IN', PLAYBACK:'UPPSPELNING', PAUSED:'PAUSAD' }
+  modeBadge.textContent = labels[mode]
+  modeBadge.className = { LIVE:'live', RECORDING:'recording', PLAYBACK:'playback', PAUSED:'paused' }[mode]
+
+  recDot.style.display    = mode === 'RECORDING' ? 'block' : 'none'
+  recClock.style.display  = mode === 'RECORDING' ? 'block' : 'none'
+  pbTime.style.display    = isPb ? 'block' : 'none'
+  speedBadge.style.display= isPb ? 'block' : 'none'
+  progWrap.classList.toggle('on', isPb)
+  if (isPb) speedBadge.textContent = SPEEDS[speedIdx] + '×'
+
+  camLabel.textContent = activeCam === 0
+    ? 'GRID — alla kameror'
+    : 'CAM ' + activeCam + ' — ' + (CAM_NAMES[activeCam - 1] || '')
+
+  document.querySelectorAll('.cam-row').forEach(r =>
+    r.classList.toggle('active', parseInt(r.dataset.cam) === activeCam)
+  )
+
+  renderKeymap()
+}
+
+// ── Keymap ────────────────────────────────────────────
+const MAPS = {
+  LIVE: [
+    { k:'0',           c:'',  d:'Grid — alla kameror' },
+    { k:'1–'+CAM_COUNT,c:'',  d:'Byt till kamera (fullskärm)' },
+    { k:'Enter',       c:'a', d:'Starta inspelning' },
+  ],
+  RECORDING: [
+    { k:'0',           c:'',  d:'Grid (under inspelning)' },
+    { k:'1–'+CAM_COUNT,c:'',  d:'Byt kamera' },
+    { k:'Enter',       c:'a', d:'Stoppa & spela upp' },
+    { k:'*',           c:'r', d:'Stoppa & kasta' },
+  ],
+  PLAYBACK: [
+    { k:'0',           c:'',  d:'Grid-visning' },
+    { k:'1–'+CAM_COUNT,c:'',  d:'Byt kameravinkel (synkat)' },
+    { k:'Enter / 5',   c:'b', d:'Pausa' },
+    { k:'+',           c:'',  d:'+5 sekunder framåt' },
+    { k:'-',           c:'',  d:'−5 sekunder bakåt' },
+    { k:'*',           c:'',  d:'Snabbare uppspelning' },
+    { k:'/',           c:'',  d:'Långsammare uppspelning' },
+    { k:'Esc',         c:'r', d:'Tillbaka till LIVE' },
+  ],
+  PAUSED: [
+    { k:'0',           c:'',  d:'Grid-visning' },
+    { k:'1–'+CAM_COUNT,c:'',  d:'Byt kameravinkel (synkat)' },
+    { k:'Enter / 5',   c:'b', d:'Fortsätt spela' },
+    { k:'+',           c:'',  d:'+5 sekunder framåt' },
+    { k:'-',           c:'',  d:'−5 sekunder bakåt' },
+    { k:'*',           c:'',  d:'Snabbare uppspelning' },
+    { k:'/',           c:'',  d:'Långsammare uppspelning' },
+    { k:'Esc',         c:'r', d:'Tillbaka till LIVE' },
+  ],
+}
+
+function renderKeymap() {
+  keymap.innerHTML = '<div class="s-lbl">Tangenter</div>'
+  ;(MAPS[mode] || []).forEach(m => {
+    const row = document.createElement('div')
+    row.className = 'km-row'
+    const k = document.createElement('span')
+    k.className = 'km-key' + (m.c ? ' ' + m.c : '')
+    k.textContent = m.k
+    const d = document.createElement('span')
+    d.className = 'km-desc'
+    d.textContent = m.d
+    row.append(k, d)
+    keymap.appendChild(row)
+  })
+}
+
+// ── Camera switch ─────────────────────────────────────
+function switchCam(idx) {
+  if (idx < 0 || idx > CAM_COUNT) return
+  activeCam = idx
+
+  if (mode === 'LIVE' || mode === 'RECORDING') {
+    applyLiveView(idx)
+    if (idx > 0) serverAction('SET_CAM', { cam: idx - 1, total: CAM_COUNT })
+  } else if (mode === 'PLAYBACK' || mode === 'PAUSED') {
+    const t = pbVideo.currentTime
+    const playing = mode === 'PLAYBACK'
+    loadPbCam(idx > 0 ? idx - 1 : 0, playing, t)
+  }
+  renderUI()
+}
+
+function applyLiveView(idx) {
+  if (idx === 0) {
+    liveImg.src = ''
+    singleView.classList.remove('on')
+    gridView.classList.add('on')
+    loadAllGridFeeds()
+  } else {
+    for (let i = 0; i < CAM_COUNT; i++) {
+      const img = document.getElementById('grid-img-' + i)
+      if (img) img.src = ''
+    }
+    gridView.classList.remove('on')
+    singleView.classList.add('on')
+    loadSingleFeed(idx - 1)
+  }
+}
+
+function setFeed(el, url) {
+  el.src = ''
+  el.src = url + '&_t=' + Date.now()
+}
+
+function loadSingleFeed(i) {
+  fetch('/livefeed/' + i).then(r=>r.json()).then(d=>{ if(d.url) setFeed(liveImg, d.url) }).catch(()=>{})
+}
+
+function loadAllGridFeeds() {
+  for (let i = 0; i < CAM_COUNT; i++) {
+    fetch('/livefeed/' + i).then(r=>r.json()).then(d=>{
+      const img = document.getElementById('grid-img-' + i)
+      if (img && d.url) setFeed(img, d.url)
+    }).catch(()=>{})
+  }
+}
+
+// ── Playback ──────────────────────────────────────────
+function loadPbCam(camIdx0, autoplay, seekTo) {
+  if (!serverFiles.length) return
+  const f = serverFiles[camIdx0] || serverFiles[0]
+  if (!f) return
+  const url = '/video/' + f.file.split('/').pop()
+
+  gridView.classList.remove('on')
+  singleView.classList.remove('on')
+  pbVideo.classList.add('on')
+  progWrap.classList.add('on')
+
+  const doSeekAndPlay = () => {
+    if (seekTo != null) pbVideo.currentTime = seekTo
+    pbVideo.playbackRate = SPEEDS[speedIdx]
+    if (autoplay) pbVideo.play()
+    else pbVideo.pause()
+  }
+
+  if (loadedFile !== url) {
+    loadedFile = url
+    pbVideo.src = url
+    pbVideo.load()
+    pbVideo.addEventListener('loadedmetadata', doSeekAndPlay, { once: true })
+  } else {
+    doSeekAndPlay()
+  }
+}
+
+pbVideo.addEventListener('timeupdate', () => {
+  if (!pbVideo.duration) return
+  progBar.style.width = (pbVideo.currentTime / pbVideo.duration * 100) + '%'
+  pbTime.textContent = fmt(pbVideo.currentTime) + ' / ' + fmt(pbVideo.duration)
+})
+
+pbVideo.addEventListener('ended', () => {
+  serverAction('PAUSE')
+})
+
+function fmt(s) {
+  return Math.floor(s/60) + ':' + String(Math.floor(s%60)).padStart(2,'0')
+}
+
+// ── Clock ─────────────────────────────────────────────
+function tickClock() {
+  if (!recStart) return
+  const s = Math.floor((Date.now() - recStart) / 1000)
+  recClock.textContent = [
+    String(Math.floor(s/3600)).padStart(2,'0'),
+    String(Math.floor((s%3600)/60)).padStart(2,'0'),
+    String(s%60).padStart(2,'0'),
+  ].join(':')
+}
+
+// ── Numpad ────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  const blocked = ['Enter','NumpadEnter','NumpadAdd','NumpadSubtract',
+                   'NumpadMultiply','NumpadDivide','Escape']
+  if (blocked.includes(e.code) || e.code.startsWith('Numpad')) e.preventDefault()
+
+  const key = (e.code === 'NumpadEnter' || e.key === 'Enter') ? 'Enter' : e.key
+
+  // 0–9: camera switch in any mode
+  if (/^[0-9]$/.test(key)) {
+    switchCam(parseInt(key))
+    return
+  }
+
+  if (mode === 'LIVE') {
+    if (key === 'Enter') serverAction('START_REC')
+
+  } else if (mode === 'RECORDING') {
+    if (key === 'Enter') serverAction('STOP_PLAY')
+    if (key === '*' && confirm('Kasta inspelningen?')) serverAction('STOP_DISCARD')
+
+  } else if (mode === 'PLAYBACK' || mode === 'PAUSED') {
+    if (key === 'Enter' || key === '5') {
+      if (mode === 'PLAYBACK') { pbVideo.pause(); serverAction('PAUSE') }
+      else                     { pbVideo.play();  serverAction('PLAY') }
+    }
+    if (key === '+') pbVideo.currentTime = Math.min((pbVideo.duration||0), pbVideo.currentTime + 5)
+    if (key === '-') pbVideo.currentTime = Math.max(0, pbVideo.currentTime - 5)
+    if (key === '*') { speedIdx = Math.min(SPEEDS.length-1, speedIdx+1); pbVideo.playbackRate = SPEEDS[speedIdx]; renderUI() }
+    if (key === '/') { speedIdx = Math.max(0, speedIdx-1);               pbVideo.playbackRate = SPEEDS[speedIdx]; renderUI() }
+    if (key === 'Escape') serverAction('GO_LIVE')
+  }
+})
+
+// ── Click handlers ────────────────────────────────────
+document.querySelectorAll('.grid-cell').forEach(c =>
+  c.addEventListener('click', () => switchCam(parseInt(c.dataset.cam)))
+)
+document.querySelectorAll('.cam-row').forEach(r =>
+  r.addEventListener('click', () => switchCam(parseInt(r.dataset.cam)))
+)
+
+// ── Disk ──────────────────────────────────────────────
+async function pollDisk() {
+  try {
+    const d = await fetch('/disk').then(r=>r.json())
+    diskInfo.textContent = 'disk: ' + d.freeGB.toFixed(1) + ' GB (' + d.pct + '%)'
+    diskInfo.className = d.pct < 10 ? 'warn' : ''
+  } catch {}
+}
+pollDisk()
+setInterval(pollDisk, 30_000)
+
+// ── Server action ─────────────────────────────────────
+async function serverAction(name, payload = {}) {
+  try {
+    await fetch('/action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: name, payload })
+    })
+  } catch(err) {
+    errorBar.textContent = 'Fel: ' + err.message
+    errorBar.style.display = 'block'
+  }
+}
+
+// ── Init ──────────────────────────────────────────────
+renderUI()
+loadAllGridFeeds()
+</script>
+</body>
+</html>

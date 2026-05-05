@@ -1,0 +1,1003 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gymcam</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow:wght@300;500;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:      #080a0d;
+      --surface: #0f1117;
+      --card:    #141720;
+      --border:  #1c2030;
+      --accent:  #e8ff47;
+      --red:     #ff3535;
+      --blue:    #2255ff;
+      --dim:     #353a50;
+      --muted:   #5a617a;
+      --text:    #c4cedf;
+      --mono:    'Share Tech Mono', monospace;
+      --sans:    'Barlow', sans-serif;
+    }
+    html, body { height: 100%; overflow: hidden; }
+    body { background: var(--bg); color: var(--text); font-family: var(--sans); font-weight: 300; display: flex; flex-direction: column; }
+
+    /* ══ TOP BAR ══ */
+    #topbar {
+      display: flex; align-items: center; gap: 14px;
+      padding: 0 20px; height: 48px;
+      background: var(--surface); border-bottom: 1px solid var(--border); flex-shrink: 0;
+    }
+    .logo { font-family: var(--mono); font-size: 1rem; letter-spacing: .14em; color: var(--accent); }
+    .logo em { color: var(--dim); font-style: normal; }
+    #mode-badge {
+      font-family: var(--mono); font-size: .72rem; letter-spacing: .12em;
+      padding: 3px 12px; border-radius: 2px; transition: background .25s, color .25s;
+    }
+    #mode-badge.live      { background: var(--dim);  color: var(--accent); }
+    #mode-badge.recording { background: var(--red);  color: #fff; }
+    #mode-badge.playback  { background: var(--blue); color: #fff; }
+    #mode-badge.paused    { background: #13183a; color: #6e8fff; border: 1px solid #2a3a7a; }
+    #mode-badge.stopping  { background: #2a1a00; color: #ff9900; border: 1px solid #7a4400; animation: pulse .8s ease-in-out infinite alternate; }
+    @keyframes pulse { from { opacity: .6; } to { opacity: 1; } }
+    #rec-dot { display: none; width: 8px; height: 8px; border-radius: 50%; background: var(--red); animation: blink 1s step-start infinite; }
+    @keyframes blink { 50% { opacity: 0; } }
+    #rec-clock  { font-family: var(--mono); font-size: .9rem; color: var(--red); display: none; }
+    #pb-time    { font-family: var(--mono); font-size: .82rem; color: var(--text); display: none; }
+    #speed-badge { font-family: var(--mono); font-size: .68rem; color: var(--accent); background: rgba(232,255,71,.1); padding: 2px 8px; border-radius: 2px; display: none; }
+    #cam-label  { font-family: var(--mono); font-size: .72rem; color: var(--muted); margin-left: auto; }
+    #disk-info  { font-family: var(--mono); font-size: .65rem; color: var(--dim); }
+    #disk-info.warn { color: var(--red); }
+
+    /* ══ LAYOUT ══ */
+    #layout { flex: 1; display: grid; grid-template-columns: 1fr 220px; min-height: 0; }
+
+    /* ══ VIEWER ══ */
+    #viewer { position: relative; background: #000; overflow: hidden; }
+    #grid-view { display: none; width: 100%; height: 100%; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 2px; }
+    #grid-view.on { display: grid; }
+    .grid-cell { position: relative; background: #04060a; overflow: hidden; cursor: pointer; }
+    .grid-cell img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .grid-label { position: absolute; bottom: 8px; left: 10px; font-family: var(--mono); font-size: .6rem; color: rgba(232,255,71,.65); letter-spacing: .07em; pointer-events: none; opacity: 0; transition: opacity .15s; }
+    .grid-cell:hover .grid-label { opacity: 1; }
+    .grid-border { position: absolute; inset: 0; border: 2px solid transparent; pointer-events: none; transition: border-color .12s; }
+    .grid-cell:hover .grid-border { border-color: rgba(232,255,71,.28); }
+    #single-view { display: none; width: 100%; height: 100%; }
+    #single-view.on { display: flex; align-items: center; justify-content: center; }
+    #live-img { width: 100%; height: 100%; object-fit: contain; display: block; }
+    #pb-video { display: none; position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
+    #pb-video.on { display: block; }
+    #prog-wrap { display: none; position: absolute; bottom: 0; left: 0; right: 0; height: 3px; background: rgba(255,255,255,.07); }
+    #prog-wrap.on { display: block; }
+    #prog-bar { height: 100%; background: var(--blue); width: 0%; transition: width .4s linear; }
+
+    /* Playback grid (all 4 videos side by side) */
+    #pb-grid { display: none; position: absolute; inset: 0; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 2px; background: #000; }
+    #pb-grid.on { display: grid; }
+    .pb-cell { position: relative; overflow: hidden; background: #04060a; }
+    .pb-cell video { width: 100%; height: 100%; object-fit: contain; display: block; }
+    .pb-cell-label { position: absolute; bottom: 6px; left: 8px; font-family: var(--mono); font-size: .58rem; color: rgba(232,255,71,.5); pointer-events: none; }
+
+    /* ══ SIDEBAR ══ */
+    #sidebar { display: flex; flex-direction: column; background: var(--surface); border-left: 1px solid var(--border); overflow: hidden; }
+    #cam-section { flex-shrink: 0; padding: 12px 10px 6px; }
+    .s-lbl { font-family: var(--mono); font-size: .58rem; letter-spacing: .15em; color: var(--dim); text-transform: uppercase; margin-bottom: 6px; padding: 0 2px; }
+    #cam-list { display: flex; flex-direction: column; gap: 2px; }
+    .cam-row { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 3px; cursor: pointer; transition: background .1s, border-color .1s; background: transparent; color: var(--text); font-family: var(--mono); font-size: .74rem; text-align: left; width: 100%; }
+    .cam-row:hover { background: var(--card); }
+    .cam-row.active { border-color: var(--accent); color: var(--accent); }
+    .cam-key { font-size: .58rem; background: var(--border); padding: 1px 5px; border-radius: 2px; color: var(--muted); flex-shrink: 0; }
+    .cam-row.active .cam-key { background: rgba(232,255,71,.12); color: var(--accent); }
+    .div { border: none; border-top: 1px solid var(--border); margin: 4px 0; flex-shrink: 0; }
+    #keymap { flex: 1; padding: 8px 12px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+    .km-row { display: flex; align-items: center; gap: 8px; }
+    .km-key { font-family: var(--mono); font-size: .63rem; background: var(--card); border: 1px solid var(--border); border-radius: 3px; padding: 3px 7px; color: var(--text); min-width: 30px; text-align: center; flex-shrink: 0; }
+    .km-key.a { border-color: var(--accent); color: var(--accent); }
+    .km-key.r { border-color: var(--red);    color: var(--red); }
+    .km-key.b { border-color: #2a50cc;       color: #6e8fff; }
+    .km-desc { font-size: .7rem; color: var(--muted); line-height: 1.3; }
+
+    /* ══ USB MODAL ══ */
+    #usb-modal {
+      display: none;
+      position: fixed; inset: 0; z-index: 100;
+      background: rgba(0,0,0,.85);
+      align-items: center; justify-content: center;
+    }
+    #usb-modal.on { display: flex; }
+    #usb-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      width: 480px;
+      max-height: 80vh;
+      display: flex; flex-direction: column;
+      overflow: hidden;
+    }
+    #usb-header {
+      padding: 16px 20px 12px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    #usb-title {
+      font-family: var(--mono); font-size: .85rem;
+      letter-spacing: .1em; color: var(--accent);
+      margin-bottom: 4px;
+    }
+    #usb-subtitle { font-size: .75rem; color: var(--muted); }
+    #usb-body { flex: 1; overflow-y: auto; padding: 10px 14px; display: flex; flex-direction: column; gap: 6px; }
+    .usb-item {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 12px; border: 1px solid var(--border);
+      border-radius: 3px; font-family: var(--mono); font-size: .78rem;
+      color: var(--text); cursor: pointer; transition: border-color .12s, background .12s;
+    }
+    .usb-item.focused { border-color: var(--accent); background: rgba(232,255,71,.04); color: var(--accent); }
+    .usb-item.selected { background: rgba(232,255,71,.08); }
+    .usb-item.selected .usb-check { color: var(--accent); }
+    .usb-num { color: var(--dim); font-size: .65rem; flex-shrink: 0; width: 18px; }
+    .usb-check { color: var(--dim); flex-shrink: 0; font-size: .9rem; }
+    .usb-name { flex: 1; }
+    #usb-footer {
+      padding: 12px 16px;
+      border-top: 1px solid var(--border);
+      display: flex; flex-direction: column; gap: 8px;
+      flex-shrink: 0;
+    }
+    #usb-status { font-family: var(--mono); font-size: .72rem; color: var(--muted); min-height: 18px; }
+    #usb-status.ok   { color: #4caf50; }
+    #usb-status.err  { color: var(--red); }
+    #usb-status.busy { color: var(--accent); }
+    #usb-keymap { display: flex; flex-wrap: wrap; gap: 8px; }
+    .usb-km { display: flex; align-items: center; gap: 5px; }
+    .usb-km .km-key { font-size: .58rem; padding: 2px 5px; min-width: 24px; }
+    .usb-km span { font-size: .65rem; color: var(--muted); }
+
+    /* ══ CONFIRM MODAL ══ */
+    #confirm-modal {
+      display: none; position: fixed; inset: 0; z-index: 200;
+      background: rgba(0,0,0,.88); align-items: center; justify-content: center;
+    }
+    #confirm-modal.on { display: flex; }
+    #confirm-box {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 4px; width: 400px; overflow: hidden;
+    }
+    #confirm-title {
+      font-family: var(--mono); font-size: .82rem; letter-spacing: .1em;
+      color: var(--accent); padding: 18px 20px 6px;
+    }
+    #confirm-sub { font-size: .78rem; color: var(--muted); padding: 0 20px 16px; line-height: 1.5; }
+    #confirm-options { display: flex; flex-direction: column; gap: 2px; padding: 0 14px 14px; }
+    .confirm-opt {
+      display: flex; align-items: center; gap: 12px;
+      padding: 11px 14px; border: 1px solid var(--border);
+      border-radius: 3px; font-family: var(--mono); font-size: .78rem;
+      color: var(--text); transition: border-color .12s, background .12s; cursor: default;
+    }
+    .confirm-opt.focused { border-color: var(--accent); background: rgba(232,255,71,.05); color: var(--accent); }
+    .confirm-opt.focused.red { border-color: var(--red); background: rgba(255,53,53,.06); color: var(--red); }
+    .confirm-key { font-size: .62rem; background: var(--border); padding: 2px 6px; border-radius: 2px; color: var(--muted); flex-shrink: 0; }
+    .confirm-opt.focused .confirm-key { background: rgba(232,255,71,.15); color: var(--accent); }
+    .confirm-opt.focused.red .confirm-key { background: rgba(255,53,53,.15); color: var(--red); }
+
+    /* Error */
+    #error-bar { display: none; background: var(--red); color: #fff; font-family: var(--mono); font-size: .74rem; padding: 6px 16px; text-align: center; flex-shrink: 0; }
+  </style>
+</head>
+<body>
+
+<div id="error-bar"></div>
+
+<div id="topbar">
+  <div class="logo">GYM<em>/</em>CAM</div>
+  <div id="mode-badge" class="live">LIVE</div>
+  <div id="rec-dot"></div>
+  <div id="rec-clock">00:00:00</div>
+  <div id="pb-time">0:00 / 0:00</div>
+  <div id="speed-badge">1×</div>
+  <div id="cam-label">GRID</div>
+  <div id="disk-info">disk: —</div>
+</div>
+
+<div id="layout">
+  <div id="viewer">
+    <!-- Live grid (cam 0) -->
+    <div id="grid-view">
+      <% config.forEach((cam, i) => { %>
+      <div class="grid-cell" data-cam="<%= i + 1 %>">
+        <img id="grid-img-<%= i %>" alt="<%= cam.name %>" />
+        <div class="grid-label">CAM <%= i+1 %> — <%= cam.name %></div>
+        <div class="grid-border"></div>
+      </div>
+      <% }) %>
+    </div>
+    <!-- Live single -->
+    <div id="single-view"><img id="live-img" alt="Live" /></div>
+    <!-- Playback single -->
+    <video id="pb-video" preload="auto"></video>
+    <!-- Playback grid (0 in playback mode) -->
+    <div id="pb-grid">
+      <% config.forEach((cam, i) => { %>
+      <div class="pb-cell">
+        <video id="pb-grid-video-<%= i %>" preload="auto" muted></video>
+        <div class="pb-cell-label">CAM <%= i+1 %> — <%= cam.name %></div>
+      </div>
+      <% }) %>
+    </div>
+    <div id="prog-wrap"><div id="prog-bar"></div></div>
+  </div>
+
+  <div id="sidebar">
+    <div id="cam-section">
+      <div class="s-lbl">Kameror</div>
+      <div id="cam-list">
+        <button class="cam-row active" data-cam="0">
+          <span class="cam-key">0</span><span>GRID</span>
+        </button>
+        <% config.forEach((cam, i) => { %>
+        <button class="cam-row" data-cam="<%= i + 1 %>">
+          <span class="cam-key"><%= i + 1 %></span><span><%= cam.name %></span>
+        </button>
+        <% }) %>
+      </div>
+    </div>
+    <div class="div"></div>
+    <div id="keymap"></div>
+  </div>
+</div>
+
+<!-- ══ CONFIRM: SPARA ELLER RADERA ══ -->
+<div id="confirm-modal">
+  <div id="confirm-box">
+    <div id="confirm-title">GÅ TILLBAKA TILL LIVE?</div>
+    <div id="confirm-sub">Inspelningen raderas om du inte sparar den.</div>
+    <div id="confirm-options">
+      <div class="confirm-opt" data-action="save"><span class="confirm-key">1</span>Spara till USB innan jag lämnar</div>
+      <div class="confirm-opt red" data-action="discard"><span class="confirm-key">2</span>Radera inspelningen &amp; gå till LIVE</div>
+      <div class="confirm-opt" data-action="cancel"><span class="confirm-key">Esc</span>Avbryt — stanna kvar</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ USB EXPORT MODAL ══ -->
+<div id="usb-modal">
+  <div id="usb-box">
+    <div id="usb-header">
+      <div id="usb-title">SPARA TILL USB</div>
+      <div id="usb-subtitle">Välj filer med siffertangenterna, bekräfta med Enter</div>
+    </div>
+    <div id="usb-body"></div>
+    <div id="usb-footer">
+      <div id="usb-status"></div>
+      <div id="usb-keymap">
+        <div class="usb-km"><span class="km-key">0–<%= config.length %></span><span>Välj fil</span></div>
+        <div class="usb-km"><span class="km-key a">*</span><span>Välj alla</span></div>
+        <div class="usb-km"><span class="km-key a">Enter</span><span>Kopiera valda</span></div>
+        <div class="usb-km"><span class="km-key r">Esc</span><span>Stäng</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const CAM_COUNT = <%= config.length %>
+const CAM_NAMES = <%- JSON.stringify(config.map(c => c.name)) %>
+
+// ── State ─────────────────────────────────────────────
+let mode        = 'LIVE'
+let activeCam   = 0        // 0 = grid, 1–N = single
+let serverFiles = []
+let recStart    = null
+let recTimerID  = null
+let speedIdx    = 2
+let loadedFile  = null
+let pbGridLoaded = false
+
+const SPEEDS = [0.25, 0.5, 1, 1.5, 2]
+
+// Confirm modal state
+let confirmOpen  = false
+let confirmFocus = 0   // 0=save 1=discard 2=cancel
+
+// USB modal state
+let usbOpen      = false
+let usbFocused   = 0      // index of highlighted row (0 = "Alla")
+let usbSelected  = new Set()
+let usbBusy      = false
+
+// ── DOM ───────────────────────────────────────────────
+const modeBadge  = document.getElementById('mode-badge')
+const recDot     = document.getElementById('rec-dot')
+const recClock   = document.getElementById('rec-clock')
+const pbTime     = document.getElementById('pb-time')
+const speedBadge = document.getElementById('speed-badge')
+const camLabel   = document.getElementById('cam-label')
+const diskInfo   = document.getElementById('disk-info')
+const errorBar   = document.getElementById('error-bar')
+const gridView   = document.getElementById('grid-view')
+const singleView = document.getElementById('single-view')
+const liveImg    = document.getElementById('live-img')
+const pbVideo    = document.getElementById('pb-video')
+const pbGrid     = document.getElementById('pb-grid')
+const progWrap   = document.getElementById('prog-wrap')
+const progBar    = document.getElementById('prog-bar')
+const keymapEl   = document.getElementById('keymap')
+const confirmModal = document.getElementById('confirm-modal')
+const usbModal   = document.getElementById('usb-modal')
+const usbBody    = document.getElementById('usb-body')
+const usbStatus  = document.getElementById('usb-status')
+
+// ── SSE ───────────────────────────────────────────────
+new EventSource('/state-stream').onmessage = e => {
+  const s = JSON.parse(e.data)
+  const prevMode = mode
+  mode        = s.mode
+  serverFiles = s.files || []
+
+  errorBar.style.display = s.error ? 'block' : 'none'
+  if (s.error) errorBar.textContent = s.error
+
+  if (mode === 'RECORDING') {
+    recStart = s.recordingStart
+    if (!recTimerID) recTimerID = setInterval(tickClock, 1000)
+  } else {
+    clearInterval(recTimerID); recTimerID = null
+  }
+
+  // Fresh entry into PLAYBACK — hide all live feeds first
+  if (mode === 'PLAYBACK' && prevMode !== 'PLAYBACK' && prevMode !== 'PAUSED') {
+    // Kill live streams
+    liveImg.src = ''
+    for (let i = 0; i < CAM_COUNT; i++) {
+      const img = document.getElementById('grid-img-' + i)
+      if (img) img.src = ''
+    }
+    gridView.classList.remove('on')
+    singleView.classList.remove('on')
+
+    speedIdx = 2
+    pbGridLoaded = false
+    activeCam = 0  // always start in grid view on entry
+    showPbGrid(true, 0)
+  }
+
+  // Return to LIVE
+  if ((mode === 'LIVE' || mode === 'RECORDING') && prevMode !== 'LIVE' && prevMode !== 'RECORDING') {
+    stopAllPbVideos()
+    pbVideo.classList.remove('on')
+    pbGrid.classList.remove('on')
+    progWrap.classList.remove('on')
+    loadedFile = null
+    pbGridLoaded = false
+    applyLiveView(activeCam)
+  }
+
+  renderUI()
+}
+
+// ── Render ────────────────────────────────────────────
+function renderUI() {
+  const isPb = mode === 'PLAYBACK' || mode === 'PAUSED'
+  modeBadge.textContent = { LIVE:'LIVE', RECORDING:'SPELAR IN', STOPPING:'AVSLUTAR…', PLAYBACK:'UPPSPELNING', PAUSED:'PAUSAD' }[mode] || mode
+  modeBadge.className   = { LIVE:'live', RECORDING:'recording', STOPPING:'stopping', PLAYBACK:'playback',  PAUSED:'paused' }[mode] || ''
+
+  recDot.style.display     = mode === 'RECORDING' ? 'block' : 'none'
+  recClock.style.display   = mode === 'RECORDING' ? 'block' : 'none'
+  pbTime.style.display     = isPb ? 'block' : 'none'
+  speedBadge.style.display = isPb ? 'block' : 'none'
+  progWrap.classList.toggle('on', isPb && activeCam !== 0)
+  if (isPb) speedBadge.textContent = SPEEDS[speedIdx] + '×'
+
+  camLabel.textContent = activeCam === 0
+    ? 'GRID — alla kameror'
+    : 'CAM ' + activeCam + ' — ' + (CAM_NAMES[activeCam - 1] || '')
+
+  document.querySelectorAll('.cam-row').forEach(r =>
+    r.classList.toggle('active', parseInt(r.dataset.cam) === activeCam)
+  )
+  renderKeymap()
+}
+
+// ── Keymaps ───────────────────────────────────────────
+const MAPS = {
+  LIVE: [
+    { k:'0',              c:'',  d:'Grid — alla kameror' },
+    { k:'1–'+CAM_COUNT,   c:'',  d:'Byt kamera (fullskärm)' },
+    { k:'Enter',          c:'a', d:'Starta inspelning' },
+  ],
+  RECORDING: [
+    { k:'0',              c:'',  d:'Grid-visning' },
+    { k:'1–'+CAM_COUNT,   c:'',  d:'Byt kamera' },
+    { k:'Enter',          c:'a', d:'Stoppa & spela upp' },
+    { k:'*',              c:'r', d:'Stoppa & kasta' },
+  ],
+  PLAYBACK: [
+    { k:'0',              c:'',  d:'Grid — alla kameror (synkat)' },
+    { k:'1–'+CAM_COUNT,   c:'',  d:'Byt kameravinkel (synkat)' },
+    { k:'5 / Enter',      c:'b', d:'Pausa' },
+    { k:'+',              c:'',  d:'+5 sekunder' },
+    { k:'-',              c:'',  d:'−5 sekunder' },
+    { k:'*',              c:'',  d:'Snabbare' },
+    { k:'/',              c:'',  d:'Långsammare' },
+    { k:'Esc',            c:'r', d:'Spara / radera & gå till LIVE' },
+  ],
+  PAUSED: [
+    { k:'0',              c:'',  d:'Grid — alla kameror (synkat)' },
+    { k:'1–'+CAM_COUNT,   c:'',  d:'Byt kameravinkel (synkat)' },
+    { k:'5 / Enter',      c:'b', d:'Fortsätt spela' },
+    { k:'+',              c:'',  d:'+5 sekunder' },
+    { k:'-',              c:'',  d:'−5 sekunder' },
+    { k:'*',              c:'',  d:'Snabbare' },
+    { k:'/',              c:'',  d:'Långsammare' },
+    { k:'Esc',            c:'r', d:'Spara / radera & gå till LIVE' },
+  ],
+}
+
+function renderKeymap() {
+  keymapEl.innerHTML = '<div class="s-lbl">Tangenter</div>'
+  ;(MAPS[mode] || []).forEach(m => {
+    const row = document.createElement('div')
+    row.className = 'km-row'
+    const k = document.createElement('span')
+    k.className = 'km-key' + (m.c ? ' ' + m.c : '')
+    k.textContent = m.k
+    const d = document.createElement('span')
+    d.className = 'km-desc'
+    d.textContent = m.d
+    row.append(k, d)
+    keymapEl.appendChild(row)
+  })
+}
+
+// ── Camera switch ─────────────────────────────────────
+// Key insight: 5 must NOT be treated as a camera switch in playback modes.
+// So switchCam is only called for camera digits (0–4 in playback, 0–CAM_COUNT in live).
+function switchCam(idx) {
+  if (idx < 0 || idx > CAM_COUNT) return
+
+  if (mode === 'PLAYBACK' || mode === 'PAUSED') {
+    captureClock()  // snapshot position BEFORE changing activeCam
+  }
+
+  activeCam = idx
+
+  if (mode === 'LIVE' || mode === 'RECORDING') {
+    applyLiveView(idx)
+    if (idx > 0) serverAction('SET_CAM', { cam: idx - 1, total: CAM_COUNT })
+  } else if (mode === 'PLAYBACK' || mode === 'PAUSED') {
+    const playing = mode === 'PLAYBACK'
+    if (idx === 0) {
+      showPbGrid(playing, null)   // null = use masterClock
+    } else {
+      hidePbGrid()
+      loadPbSingle(idx - 1, playing, null)  // null = use masterClock
+    }
+  }
+  renderUI()
+}
+
+// ── Live feeds ────────────────────────────────────────
+function applyLiveView(idx) {
+  if (idx === 0) {
+    liveImg.src = ''
+    singleView.classList.remove('on')
+    gridView.classList.add('on')
+    loadAllGridFeeds()
+  } else {
+    for (let i = 0; i < CAM_COUNT; i++) {
+      const img = document.getElementById('grid-img-' + i)
+      if (img) img.src = ''
+    }
+    gridView.classList.remove('on')
+    singleView.classList.add('on')
+    loadSingleFeed(idx - 1)
+  }
+}
+
+function setFeed(el, url) { el.src = ''; el.src = url + '&_t=' + Date.now() }
+
+function loadSingleFeed(i) {
+  fetch('/livefeed/' + i).then(r=>r.json()).then(d=>{ if(d.url) setFeed(liveImg, d.url) }).catch(()=>{})
+}
+function loadAllGridFeeds() {
+  for (let i = 0; i < CAM_COUNT; i++) {
+    fetch('/livefeed/' + i).then(r=>r.json()).then(d=>{
+      const img = document.getElementById('grid-img-' + i)
+      if (img && d.url) setFeed(img, d.url)
+    }).catch(()=>{})
+  }
+}
+
+// ── Playback core ────────────────────────────────────
+// masterClock tracks wall-clock position independently of which
+// video element is active, so switching views stays in sync.
+let masterClock = 0
+let masterPlaying = false
+
+function safePlay(v) {
+  const p = v.play()
+  if (p && typeof p.catch === 'function') p.catch(err => {
+    if (err.name !== 'AbortError') showErr('Uppspelningsfel: ' + err.message)
+  })
+}
+
+// Call before switching views to snapshot the current position
+function captureClock() {
+  // Always read from the video element that is currently active
+  if (activeCam === 0) {
+    const v = document.getElementById('pb-grid-video-0')
+    if (v && v.readyState >= 1 && !v.ended) masterClock = v.currentTime
+  } else {
+    if (pbVideo.readyState >= 1 && !pbVideo.ended) masterClock = pbVideo.currentTime
+  }
+  masterPlaying = mode === 'PLAYBACK'
+}
+
+function loadPbSingle(camIdx0, autoplay, seekTo) {
+  if (!serverFiles.length) { showErr('Inga filer att spela upp.'); return }
+  const f = serverFiles[camIdx0] || serverFiles[0]
+  if (!f) { showErr('Filen hittades inte.'); return }
+  const url = '/video/' + f.file.split('/').pop()
+
+  // Hide grid, show single
+  pbGrid.classList.remove('on')
+  gridView.classList.remove('on')
+  singleView.classList.remove('on')
+  progWrap.classList.add('on')
+  pbVideo.classList.add('on')
+
+  // Pause all grid videos to save resources (keep src for fast re-entry)
+  for (let i = 0; i < CAM_COUNT; i++) {
+    const gv = document.getElementById('pb-grid-video-' + i)
+    if (gv) gv.pause()
+  }
+
+  const go = () => {
+    // If at end of video, restart from beginning
+    const target = seekTo ?? masterClock
+    pbVideo.currentTime = (pbVideo.duration && target >= pbVideo.duration - 0.5) ? 0 : target
+    pbVideo.playbackRate = SPEEDS[speedIdx]
+    if (autoplay) safePlay(pbVideo); else pbVideo.pause()
+  }
+
+  if (loadedFile !== url) {
+    loadedFile = url
+    pbVideo.removeAttribute('src')
+    pbVideo.load()
+    pbVideo.src = url
+    pbVideo.addEventListener('loadedmetadata', go, { once: true })
+    pbVideo.addEventListener('error', () => {
+      if (pbVideo.src && pbVideo.src !== window.location.href)
+        showErr('Kunde inte ladda video: ' + url)
+    }, { once: true })
+    pbVideo.load()
+  } else {
+    go()
+  }
+}
+
+function showPbGrid(autoplay, seekTo) {
+  // Pause & hide single video
+  pbVideo.pause()
+  pbVideo.classList.remove('on')
+  progWrap.classList.remove('on')
+  // Hide live views
+  gridView.classList.remove('on')
+  singleView.classList.remove('on')
+  pbGrid.classList.add('on')
+
+  const t = seekTo ?? masterClock
+
+  for (let i = 0; i < CAM_COUNT; i++) {
+    const v = document.getElementById('pb-grid-video-' + i)
+    const f = serverFiles[i]
+    if (!v || !f) continue
+
+    const url = '/video/' + f.file.split('/').pop()
+
+    const go = () => {
+      // If at end of video, restart from beginning
+      const target = (v.duration && t >= v.duration - 0.5) ? 0 : t
+      v.currentTime = target
+      v.playbackRate = SPEEDS[speedIdx]
+      if (autoplay) safePlay(v); else v.pause()
+    }
+
+    if (v.dataset.src !== url) {
+      // First time loading this file
+      if (v._onErr) { v.removeEventListener('error', v._onErr); v._onErr = null }
+      v._onErr = () => {
+        if (!v.src || v.src === window.location.href) return
+        showErr('Kunde inte ladda video för ' + (f.name || 'CAM ' + (i+1)))
+      }
+      v.dataset.src = url
+      v.removeAttribute('src')
+      v.load()
+      v.src = url
+      v.addEventListener('loadedmetadata', go, { once: true })
+      v.addEventListener('error', v._onErr)
+      v.load()
+    } else {
+      // Already loaded — just seek and play
+      go()
+    }
+  }
+  pbGridLoaded = true
+}
+
+function hidePbGrid() {
+  for (let i = 0; i < CAM_COUNT; i++) {
+    const v = document.getElementById('pb-grid-video-' + i)
+    if (v) v.pause()
+  }
+  pbGrid.classList.remove('on')
+}
+
+function stopAllPbVideos() {
+  pbVideo.pause(); pbVideo.removeAttribute('src'); pbVideo.load()
+  for (let i = 0; i < CAM_COUNT; i++) {
+    const v = document.getElementById('pb-grid-video-' + i)
+    if (!v) continue
+    if (v._onErr) { v.removeEventListener('error', v._onErr); v._onErr = null }
+    v.pause()
+    v.removeAttribute('src')
+    v.load()
+    v.dataset.src = ''
+  }
+  pbGridLoaded = false
+  loadedFile = null
+}
+
+// Sync speed/seek across grid videos
+function applyToAllPbVideos(fn) {
+  fn(pbVideo)
+  for (let i = 0; i < CAM_COUNT; i++) {
+    const v = document.getElementById('pb-grid-video-' + i)
+    if (v) fn(v)
+  }
+}
+
+// ── Master clock + progress bar ──────────────────────
+// pbVideo drives clock in single mode
+pbVideo.addEventListener('timeupdate', () => {
+  if (activeCam !== 0 && pbVideo.readyState >= 1) {
+    masterClock = pbVideo.currentTime
+    updateProgressBar(pbVideo.currentTime, pbVideo.duration)
+  }
+})
+pbVideo.addEventListener('ended', () => {
+  masterClock = 0   // reset so "watch again" starts from beginning
+  serverAction('PAUSE')
+})
+
+// pb-grid-video-0 drives clock + progress bar in grid mode
+;(function() {
+  const v0 = document.getElementById('pb-grid-video-0')
+  if (!v0) return
+  v0.addEventListener('timeupdate', () => {
+    if (activeCam === 0 && v0.readyState >= 1) {
+      masterClock = v0.currentTime
+      updateProgressBar(v0.currentTime, v0.duration)
+    }
+  })
+  v0.addEventListener('ended', () => {
+    masterClock = 0
+    serverAction('PAUSE')
+  })
+})()
+
+function updateProgressBar(current, duration) {
+  if (!duration) return
+  progBar.style.width = (current / duration * 100) + '%'
+  pbTime.textContent = fmt(current) + ' / ' + fmt(duration)
+}
+
+function fmt(s) { return Math.floor(s/60) + ':' + String(Math.floor(s%60)).padStart(2,'0') }
+
+// ── Recording clock ───────────────────────────────────
+function tickClock() {
+  if (!recStart) return
+  const s = Math.floor((Date.now() - recStart) / 1000)
+  recClock.textContent = [
+    String(Math.floor(s/3600)).padStart(2,'0'),
+    String(Math.floor((s%3600)/60)).padStart(2,'0'),
+    String(s%60).padStart(2,'0'),
+  ].join(':')
+}
+
+// ── Numpad ────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (e.code.startsWith('Numpad') || ['Enter','Escape','NumpadEnter'].includes(e.code)) {
+    e.preventDefault()
+  }
+
+  const key = (e.code === 'NumpadEnter' || e.key === 'Enter') ? 'Enter'
+             : e.code === 'NumpadDecimal' ? ','
+             : e.key
+
+  // ── USB modal captures all keys ──────────────────────
+  if (usbOpen) { handleUsbKey(key); return }
+
+  // ── Block all input while ffmpeg is closing ──────────
+  if (mode === 'STOPPING') return
+
+  // ── Confirm modal captures all keys ─────────────────
+  if (confirmOpen) { handleConfirmKey(key); return }
+
+  const isPb = mode === 'PLAYBACK' || mode === 'PAUSED'
+
+  // ── In playback: 5 = pause/play, NOT camera switch ───
+  if (isPb && key === '5') {
+    togglePause(); return
+  }
+
+  // ── Numeric: camera switch ────────────────────────────
+  if (/^[0-9]$/.test(key)) {
+    switchCam(parseInt(key)); return
+  }
+
+  // ── Mode-specific ─────────────────────────────────────
+  if (mode === 'LIVE') {
+    if (key === 'Enter') serverAction('START_REC')
+
+  } else if (mode === 'RECORDING') {
+    if (key === 'Enter') serverAction('STOP_PLAY')
+    if (key === '*' && confirm('Kasta inspelningen?')) serverAction('STOP_DISCARD')
+
+  } else if (isPb) {
+    if (key === 'Enter') togglePause()
+    if (key === '+') seekAll(5)
+    if (key === '-') seekAll(-5)
+    if (key === '*') { speedIdx = Math.min(SPEEDS.length-1, speedIdx+1); applySpeed(); renderUI() }
+    if (key === '/') { speedIdx = Math.max(0, speedIdx-1);               applySpeed(); renderUI() }
+    if (key === 'Escape') openConfirmModal()
+  }
+})
+
+function togglePause() {
+  if (mode === 'PLAYBACK') {
+    captureClock()
+    applyToAllPbVideos(v => v.pause())
+    serverAction('PAUSE')
+  } else if (mode === 'PAUSED') {
+    // Re-sync all videos to masterClock before resuming
+    applyToAllPbVideos(v => {
+      if (v.readyState >= 1) v.currentTime = masterClock
+    })
+    applyToAllPbVideos(v => safePlay(v))
+    serverAction('PLAY')
+  }
+}
+
+function seekAll(delta) {
+  captureClock()
+  masterClock = Math.max(0, masterClock + delta)
+  applyToAllPbVideos(v => {
+    if (v.readyState < 1) return
+    v.currentTime = masterClock
+  })
+}
+
+function applySpeed() {
+  applyToAllPbVideos(v => { v.playbackRate = SPEEDS[speedIdx] })
+}
+
+// ── Confirm modal (Esc from playback) ────────────────
+const CONFIRM_ACTIONS = ['save', 'discard', 'cancel']
+
+function openConfirmModal() {
+  confirmOpen  = true
+  confirmFocus = 0
+  renderConfirmModal()
+  confirmModal.classList.add('on')
+}
+
+function closeConfirmModal() {
+  confirmOpen = false
+  confirmModal.classList.remove('on')
+}
+
+function renderConfirmModal() {
+  document.querySelectorAll('.confirm-opt').forEach((el, i) =>
+    el.classList.toggle('focused', i === confirmFocus)
+  )
+}
+
+function handleConfirmKey(key) {
+  if (key === '1') { confirmFocus = 0; executeConfirm() }
+  else if (key === '2') { confirmFocus = 1; executeConfirm() }
+  else if (key === 'Escape') { closeConfirmModal() }
+  else if (key === '+') { confirmFocus = Math.min(2, confirmFocus + 1); renderConfirmModal() }
+  else if (key === '-') { confirmFocus = Math.max(0, confirmFocus - 1); renderConfirmModal() }
+  else if (key === 'Enter') { executeConfirm() }
+}
+
+async function executeConfirm() {
+  const action = CONFIRM_ACTIONS[confirmFocus]
+  closeConfirmModal()
+  if (action === 'cancel') return
+  if (action === 'discard') {
+    await serverAction('GO_LIVE_DISCARD')
+  } else if (action === 'save') {
+    // Open USB modal; after copy completes, go to live
+    openUsbModal({ afterCopy: () => serverAction('GO_LIVE_DISCARD') })
+  }
+}
+
+// ── USB Modal ─────────────────────────────────────────
+let usbAfterCopy = null
+
+function openUsbModal(opts = {}) {
+  if (!serverFiles.length) {
+    showErr('Inga inspelade filer att spara.')
+    return
+  }
+  usbAfterCopy = opts.afterCopy || null
+  usbSelected  = new Set()
+  usbFocused   = 0
+  usbBusy      = false
+  usbOpen      = true
+  renderUsbModal()
+  usbModal.classList.add('on')
+  usbStatus.textContent = ''
+  usbStatus.className = ''
+}
+
+function closeUsbModal() {
+  usbOpen = false
+  usbModal.classList.remove('on')
+}
+
+function renderUsbModal() {
+  usbBody.innerHTML = ''
+
+  // "Alla filer" row
+  const allRow = makeUsbRow(-1, 'Alla filer', usbSelected.size === serverFiles.length && serverFiles.length > 0)
+  allRow.dataset.idx = -1
+  usbBody.appendChild(allRow)
+
+  serverFiles.forEach((f, i) => {
+    const row = makeUsbRow(i, f.name, usbSelected.has(i))
+    row.dataset.idx = i
+    usbBody.appendChild(row)
+  })
+
+  // Highlight focused row
+  const rows = usbBody.querySelectorAll('.usb-item')
+  rows.forEach((r, i) => r.classList.toggle('focused', i === usbFocused))
+}
+
+function makeUsbRow(idx, label, checked) {
+  const row = document.createElement('div')
+  row.className = 'usb-item' + (checked ? ' selected' : '')
+  row.innerHTML = `<span class="usb-num">${idx === -1 ? '*' : idx + 1}</span>
+    <span class="usb-name">${label}</span>
+    <span class="usb-check">${checked ? '✓' : '○'}</span>`
+  return row
+}
+
+function handleUsbKey(key) {
+  if (usbBusy) return
+
+  const totalRows = serverFiles.length + 1 // +1 for "Alla"
+
+  if (key === 'Escape') { closeUsbModal(); return }
+
+  if (key === 'Enter') { doUsbCopy(); return }
+
+  if (key === '*') {
+    // Select all
+    if (usbSelected.size === serverFiles.length) {
+      usbSelected.clear()
+    } else {
+      serverFiles.forEach((_, i) => usbSelected.add(i))
+    }
+    renderUsbModal()
+    return
+  }
+
+  // Number keys: toggle that file (1-based; key 1 = file index 0)
+  if (/^[0-9]$/.test(key)) {
+    const n = parseInt(key)
+    if (n === 0) {
+      // Move focus to "Alla" row (index 0)
+      usbFocused = 0
+    } else if (n <= serverFiles.length) {
+      const fileIdx = n - 1
+      if (usbSelected.has(fileIdx)) usbSelected.delete(fileIdx)
+      else usbSelected.add(fileIdx)
+    }
+    renderUsbModal()
+    return
+  }
+
+  // +/- to move focus
+  if (key === '+') { usbFocused = Math.min(totalRows - 1, usbFocused + 1); renderUsbModal() }
+  if (key === '-') { usbFocused = Math.max(0, usbFocused - 1);             renderUsbModal() }
+}
+
+async function doUsbCopy() {
+  if (usbSelected.size === 0) {
+    usbStatus.textContent = 'Välj minst en fil först.'
+    usbStatus.className = 'err'
+    return
+  }
+  usbBusy = true
+  usbStatus.textContent = 'Kopierar till USB…'
+  usbStatus.className = 'busy'
+
+  const filesToCopy = [...usbSelected].map(i => serverFiles[i].file)
+
+  try {
+    const r = await fetch('/usb-export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ files: filesToCopy })
+    })
+    const d = await r.json()
+    if (r.ok) {
+      usbStatus.textContent = `✓ ${d.copied} fil(er) kopierade till ${d.destination}`
+      usbStatus.className = 'ok'
+      setTimeout(() => {
+        closeUsbModal()
+        if (usbAfterCopy) { usbAfterCopy(); usbAfterCopy = null }
+      }, 2000)
+    } else {
+      usbStatus.textContent = 'Fel: ' + (d.error || 'Okänt fel')
+      usbStatus.className = 'err'
+    }
+  } catch(err) {
+    usbStatus.textContent = 'Nätverksfel: ' + err.message
+    usbStatus.className = 'err'
+  }
+  usbBusy = false
+}
+
+// ── Click handlers ────────────────────────────────────
+document.querySelectorAll('.grid-cell').forEach(c =>
+  c.addEventListener('click', () => !usbOpen && switchCam(parseInt(c.dataset.cam)))
+)
+document.querySelectorAll('.cam-row').forEach(r =>
+  r.addEventListener('click', () => !usbOpen && switchCam(parseInt(r.dataset.cam)))
+)
+
+// ── Disk polling ──────────────────────────────────────
+async function pollDisk() {
+  try {
+    const d = await fetch('/disk').then(r=>r.json())
+    diskInfo.textContent = 'disk: ' + d.freeGB.toFixed(1) + ' GB (' + d.pct + '%)'
+    diskInfo.className = d.pct < 10 ? 'warn' : ''
+  } catch {}
+}
+pollDisk(); setInterval(pollDisk, 30_000)
+
+// ── Server action ─────────────────────────────────────
+async function serverAction(name, payload = {}) {
+  try {
+    await fetch('/action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: name, payload })
+    })
+  } catch(err) {
+    showErr('Fel: ' + err.message)
+  }
+}
+
+function showErr(msg) {
+  errorBar.textContent = msg
+  errorBar.style.display = 'block'
+  setTimeout(() => { errorBar.style.display = 'none' }, 4000)
+}
+
+// ── Init ──────────────────────────────────────────────
+renderUI()
+// Show live grid immediately on load
+gridView.classList.add('on')
+loadAllGridFeeds()
+</script>
+</body>
+</html>
