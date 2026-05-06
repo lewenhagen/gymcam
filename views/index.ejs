@@ -497,18 +497,53 @@ function applyLiveView(idx) {
   }
 }
 
+// Cache feed URLs so we don't re-fetch on every retry
+const feedUrlCache = {}
+const feedRetryTimers = {}
+
+async function getFeedUrl(i) {
+  if (feedUrlCache[i]) return feedUrlCache[i]
+  const d = await fetch('/livefeed/' + i).then(r => r.json())
+  if (d.url) feedUrlCache[i] = d.url
+  return d.url
+}
+
 function setFeed(el, url) { el.src = ''; el.src = url + '&_t=' + Date.now() }
 
 function loadSingleFeed(i) {
-  fetch('/livefeed/' + i).then(r=>r.json()).then(d=>{ if(d.url) setFeed(liveImg, d.url) }).catch(()=>{})
+  clearTimeout(feedRetryTimers['single'])
+  getFeedUrl(i).then(url => {
+    if (!url) return
+    liveImg.onerror = () => {
+      feedRetryTimers['single'] = setTimeout(() => loadSingleFeed(i), 1500)
+    }
+    liveImg.onload = () => { liveImg.onerror = null }
+    setFeed(liveImg, url)
+  }).catch(() => {
+    feedRetryTimers['single'] = setTimeout(() => loadSingleFeed(i), 1500)
+  })
 }
+
 function loadAllGridFeeds() {
   for (let i = 0; i < CAM_COUNT; i++) {
-    fetch('/livefeed/' + i).then(r=>r.json()).then(d=>{
-      const img = document.getElementById('grid-img-' + i)
-      if (img && d.url) setFeed(img, d.url)
-    }).catch(()=>{})
+    loadGridFeed(i)
   }
+}
+
+function loadGridFeed(i) {
+  clearTimeout(feedRetryTimers[i])
+  getFeedUrl(i).then(url => {
+    if (!url) { feedRetryTimers[i] = setTimeout(() => loadGridFeed(i), 1500); return }
+    const img = document.getElementById('grid-img-' + i)
+    if (!img) return
+    img.onerror = () => {
+      feedRetryTimers[i] = setTimeout(() => loadGridFeed(i), 1500)
+    }
+    img.onload = () => { img.onerror = null }
+    setFeed(img, url)
+  }).catch(() => {
+    feedRetryTimers[i] = setTimeout(() => loadGridFeed(i), 1500)
+  })
 }
 
 // ── Playback core ────────────────────────────────────
