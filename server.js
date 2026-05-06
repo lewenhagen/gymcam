@@ -200,7 +200,7 @@ import express from 'express'
 import { readFile } from 'fs/promises'
 import fs from 'fs'
 import path from 'path'
-import { execFile } from 'node:child_process'
+import { execFile, execSync } from 'node:child_process'
 import open from 'open'
 import { URL } from 'url'
 import { getDiskSpace } from './modules/managecameras.js'
@@ -317,38 +317,59 @@ function looksLikeUsb(dirPath) {
   try { fs.accessSync(dirPath, fs.constants.W_OK); return true } catch { return false }
 }
 
+// function findUsbMount() {
+//   // Sätt USB_MOUNT-miljövariabeln för fast monteringspunkt (rekommenderat på Debian)
+//   if (process.env.USB_MOUNT && fs.existsSync(process.env.USB_MOUNT)) {
+//     if (looksLikeUsb(process.env.USB_MOUNT)) return process.env.USB_MOUNT
+//   }
+
+//   // /media/<user>/<enhet> — standard för udisks2 på Debian/Ubuntu
+//   const media = '/media'
+//   if (fs.existsSync(media)) {
+//     for (const user of fs.readdirSync(media, { withFileTypes: true })) {
+//       if (!user.isDirectory()) continue
+//       try {
+//         for (const dev of fs.readdirSync(path.join(media, user.name), { withFileTypes: true })) {
+//           if (!dev.isDirectory()) continue
+//           const p = path.join(media, user.name, dev.name)
+//           if (looksLikeUsb(p)) return p
+//         }
+//       } catch {}
+//     }
+//   }
+
+//   // /mnt/<enhet> — manuell montering, hoppa över WSL Windows-drives
+//   const mnt = '/mnt'
+//   if (fs.existsSync(mnt)) {
+//     for (const e of fs.readdirSync(mnt, { withFileTypes: true })) {
+//       if (!e.isDirectory()) continue
+//       const p = path.join(mnt, e.name)
+//       if (looksLikeUsb(p)) return p
+//     }
+//   }
+
+//   return null
+// }
 function findUsbMount() {
-  // Sätt USB_MOUNT-miljövariabeln för fast monteringspunkt (rekommenderat på Debian)
-  if (process.env.USB_MOUNT && fs.existsSync(process.env.USB_MOUNT)) {
-    if (looksLikeUsb(process.env.USB_MOUNT)) return process.env.USB_MOUNT
-  }
+  try {
+    const output = execSync('lsblk -J -o NAME,MOUNTPOINT,LABEL', { encoding: 'utf8' })
+    const data = JSON.parse(output)
 
-  // /media/<user>/<enhet> — standard för udisks2 på Debian/Ubuntu
-  const media = '/media'
-  if (fs.existsSync(media)) {
-    for (const user of fs.readdirSync(media, { withFileTypes: true })) {
-      if (!user.isDirectory()) continue
-      try {
-        for (const dev of fs.readdirSync(path.join(media, user.name), { withFileTypes: true })) {
-          if (!dev.isDirectory()) continue
-          const p = path.join(media, user.name, dev.name)
-          if (looksLikeUsb(p)) return p
+    function find(devices) {
+      for (const d of devices) {
+        if (d.label === 'GYMCAM' && d.mountpoint) return d.mountpoint
+        if (d.children) {
+          const res = find(d.children)
+          if (res) return res
         }
-      } catch {}
+      }
+      return null
     }
-  }
 
-  // /mnt/<enhet> — manuell montering, hoppa över WSL Windows-drives
-  const mnt = '/mnt'
-  if (fs.existsSync(mnt)) {
-    for (const e of fs.readdirSync(mnt, { withFileTypes: true })) {
-      if (!e.isDirectory()) continue
-      const p = path.join(mnt, e.name)
-      if (looksLikeUsb(p)) return p
-    }
+    return find(data.blockdevices)
+  } catch {
+    return null
   }
-
-  return null
 }
 
 app.post('/usb-export', async (req, res) => {
