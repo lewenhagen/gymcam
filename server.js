@@ -350,14 +350,52 @@ function looksLikeUsb(dirPath) {
 
 //   return null
 // }
+// function findUsbMount() {
+//   try {
+//     const output = execSync('lsblk -J -o NAME,MOUNTPOINT,LABEL', { encoding: 'utf8' })
+//     const data = JSON.parse(output)
+
+//     function find(devices) {
+//       for (const d of devices) {
+//         if (d.label === 'GYMCAM' && d.mountpoint) return d.mountpoint
+//         if (d.children) {
+//           const res = find(d.children)
+//           if (res) return res
+//         }
+//       }
+//       return null
+//     }
+
+//     return find(data.blockdevices)
+//   } catch {
+//     return null
+//   }
+// }
 function findUsbMount() {
   try {
-    const output = execSync('lsblk -J -o NAME,MOUNTPOINT,LABEL', { encoding: 'utf8' })
+    const output = execSync('lsblk -J -o NAME,MOUNTPOINT,LABEL,RM', { encoding: 'utf8' })
     const data = JSON.parse(output)
 
     function find(devices) {
       for (const d of devices) {
-        if (d.label === 'GYMCAM' && d.mountpoint) return d.mountpoint
+        // DEBUG (remove later)
+        console.log('CHECK:', d.name, d.label, d.mountpoint, d.rm)
+
+        // 1. Prefer label match (case-insensitive + trimmed)
+        if (
+          d.label &&
+          d.mountpoint &&
+          d.label.trim().toLowerCase() === 'gymcam'
+        ) {
+          return d.mountpoint
+        }
+
+        // 2. Fallback: any removable mounted device
+        if (d.rm && d.mountpoint) {
+          return d.mountpoint
+        }
+
+        // 3. Recurse into children
         if (d.children) {
           const res = find(d.children)
           if (res) return res
@@ -367,7 +405,8 @@ function findUsbMount() {
     }
 
     return find(data.blockdevices)
-  } catch {
+  } catch (e) {
+    console.error('USB detect error:', e)
     return null
   }
 }
