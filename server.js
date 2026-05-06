@@ -372,6 +372,9 @@ function looksLikeUsb(dirPath) {
 //   }
 // }
 function findUsbMount() {
+  if (process.env.USB_MOUNT && fs.existsSync(process.env.USB_MOUNT)) {
+    return process.env.USB_MOUNT
+  }
   try {
     const output = execSync('lsblk -J -o NAME,MOUNTPOINT,LABEL,RM', { encoding: 'utf8' })
     const data = JSON.parse(output)
