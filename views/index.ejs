@@ -530,16 +530,16 @@ function loadSingleFeed(i) {
   })
 }
 
-// function loadAllGridFeeds() {
-//   for (let i = 0; i < CAM_COUNT; i++) {
-//     loadGridFeed(i)
-//   }
-// }
 function loadAllGridFeeds() {
   for (let i = 0; i < CAM_COUNT; i++) {
-    setTimeout(() => loadGridFeed(i), i * 250)
+    loadGridFeed(i)
   }
 }
+// function loadAllGridFeeds() {
+//   for (let i = 0; i < CAM_COUNT; i++) {
+//     setTimeout(() => loadGridFeed(i), i * 250)
+//   }
+// }
 
 function loadGridFeed(i) {
   clearTimeout(feedRetryTimers[i])
