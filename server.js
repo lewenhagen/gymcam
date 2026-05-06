@@ -434,18 +434,39 @@ app.post('/usb-export', async (req, res) => {
   let copied = 0
   const errors = []
 
-  for (const filePath of files) {
-    // Säkerhetskontroll: filen måste ligga i VIDEO_DIR
-    const src = path.resolve(VIDEO_DIR, path.basename(filePath))
-    if (!src.startsWith(VIDEO_DIR)) { errors.push(filePath + ': nekad'); continue }
-    if (!fs.existsSync(src)) { errors.push(filePath + ': finns ej'); continue }
+  // for (const filePath of files) {
+  //   // Säkerhetskontroll: filen måste ligga i VIDEO_DIR
+  //   const src = path.resolve(VIDEO_DIR, path.basename(filePath))
+  //   if (!src.startsWith(VIDEO_DIR)) { errors.push(filePath + ': nekad'); continue }
+  //   if (!fs.existsSync(src)) { errors.push(filePath + ': finns ej'); continue }
 
-    const dest = path.join(destDir, path.basename(src))
+  //   const dest = path.join(destDir, path.basename(src))
+  //   try {
+  //     fs.copyFileSync(src, dest)
+  //     copied++
+  //   } catch (e) {
+  //     errors.push(path.basename(src) + ': ' + e.message)
+  //   }
+  // }
+  for (const filePath of files) {
+    const cleanName = path.basename(filePath)   // ALWAYS normalize
+
+    const src = path.join(VIDEO_DIR, cleanName)
+
+    console.log('COPYING:', src)
+
+    if (!fs.existsSync(src)) {
+      errors.push(cleanName + ': finns ej')
+      continue
+    }
+
+    const dest = path.join(destDir, cleanName)
+
     try {
       fs.copyFileSync(src, dest)
       copied++
     } catch (e) {
-      errors.push(path.basename(src) + ': ' + e.message)
+      errors.push(cleanName + ': ' + e.message)
     }
   }
 
