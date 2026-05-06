@@ -508,13 +508,13 @@ async function getFeedUrl(i) {
   return d.url
 }
 
-// function setFeed(el, url) { el.src = ''; el.src = url + '&_t=' + Date.now() }
-function setFeed(el, url) {
-  if (el.dataset.src === url) return // prevent unnecessary reloads
+function setFeed(el, url) { el.src = ''; el.src = url + '&_t=' + Date.now() }
+// function setFeed(el, url) {
+//   if (el.dataset.src === url) return // prevent unnecessary reloads
 
-  el.dataset.src = url
-  el.src = url
-}
+//   el.dataset.src = url
+//   el.src = url
+// }
 
 function loadSingleFeed(i) {
   clearTimeout(feedRetryTimers['single'])
