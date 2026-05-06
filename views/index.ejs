@@ -851,34 +851,130 @@ function closeUsbModal() {
   usbModal.classList.remove('on')
 }
 
+// function renderUsbModal() {
+//   usbBody.innerHTML = ''
+
+//   // "Alla filer" row
+//   const allRow = makeUsbRow(-1, 'Alla filer', usbSelected.size === serverFiles.length && serverFiles.length > 0)
+//   allRow.dataset.idx = -1
+//   usbBody.appendChild(allRow)
+
+//   serverFiles.forEach((f, i) => {
+//     const row = makeUsbRow(i, f.name, usbSelected.has(i))
+//     row.dataset.idx = i
+//     usbBody.appendChild(row)
+//   })
+
+//   // Highlight focused row
+//   const rows = usbBody.querySelectorAll('.usb-item')
+//   rows.forEach((r, i) => r.classList.toggle('focused', i === usbFocused))
+// }
 function renderUsbModal() {
   usbBody.innerHTML = ''
 
-  // "Alla filer" row
-  const allRow = makeUsbRow(-1, 'Alla filer', usbSelected.size === serverFiles.length && serverFiles.length > 0)
+  const allSelected =
+    usbSelected.size === serverFiles.length && serverFiles.length > 0
+
+  // "Alla filer"
+  const allRow = makeUsbRow(-1, 'Alla filer', allSelected)
   allRow.dataset.idx = -1
   usbBody.appendChild(allRow)
 
+  // Files
   serverFiles.forEach((f, i) => {
     const row = makeUsbRow(i, f.name, usbSelected.has(i))
     row.dataset.idx = i
     usbBody.appendChild(row)
   })
 
-  // Highlight focused row
+  // Focus highlight
   const rows = usbBody.querySelectorAll('.usb-item')
-  rows.forEach((r, i) => r.classList.toggle('focused', i === usbFocused))
+  rows.forEach((r, i) => {
+    r.classList.toggle('focused', i === usbFocused)
+  })
+
+  // Click handling (IMPORTANT FIX)
+  usbBody.querySelectorAll('.usb-item').forEach(row => {
+    row.onclick = () => {
+      const idx = parseInt(row.dataset.idx)
+
+      if (idx === -1) {
+        // toggle all
+        if (usbSelected.size === serverFiles.length) {
+          usbSelected.clear()
+        } else {
+          serverFiles.forEach((_, i) => usbSelected.add(i))
+        }
+      } else {
+        if (usbSelected.has(idx)) usbSelected.delete(idx)
+        else usbSelected.add(idx)
+      }
+
+      renderUsbModal()
+    }
+  })
 }
 
+// function makeUsbRow(idx, label, checked) {
+//   const row = document.createElement('div')
+//   row.className = 'usb-item' + (checked ? ' selected' : '')
+//   row.innerHTML = `<span class="usb-num">${idx === -1 ? '*' : idx + 1}</span>
+//     <span class="usb-name">${label}</span>
+//     <span class="usb-check">${checked ? '✓' : '○'}</span>`
+//   return row
+// }
 function makeUsbRow(idx, label, checked) {
   const row = document.createElement('div')
   row.className = 'usb-item' + (checked ? ' selected' : '')
-  row.innerHTML = `<span class="usb-num">${idx === -1 ? '*' : idx + 1}</span>
+
+  row.innerHTML = `
+    <span class="usb-num">${idx === -1 ? '*' : idx + 1}</span>
     <span class="usb-name">${label}</span>
-    <span class="usb-check">${checked ? '✓' : '○'}</span>`
+    <span class="usb-check">${checked ? '✓' : '○'}</span>
+  `
+
   return row
 }
 
+// function handleUsbKey(key) {
+//   if (usbBusy) return
+
+//   const totalRows = serverFiles.length + 1 // +1 for "Alla"
+
+//   if (key === 'Escape') { closeUsbModal(); return }
+
+//   if (key === 'Enter') { doUsbCopy(); return }
+
+//   if (key === '*') {
+//     // Select all
+//     if (usbSelected.size === serverFiles.length) {
+//       usbSelected.clear()
+//     } else {
+//       serverFiles.forEach((_, i) => usbSelected.add(i))
+//     }
+//     renderUsbModal()
+//     return
+//   }
+
+//   // Number keys: toggle that file (1-based; key 1 = file index 0)
+//   if (/^[0-9]$/.test(key)) {
+//     const n = parseInt(key)
+//     if (n === 0) {
+//       // Move focus to "Alla" row (index 0)
+//       usbFocused = 0
+//     } else if (n <= serverFiles.length) {
+//       const fileIdx = n - 1
+//       if (usbSelected.has(fileIdx)) usbSelected.delete(fileIdx)
+//       else usbSelected.add(fileIdx)
+//     }
+//     renderUsbModal()
+//     return
+//   }
+
+//   // +/- to move focus
+//   if (key === '+') { usbFocused = Math.min(totalRows - 1, usbFocused + 1); renderUsbModal() }
+//   if (key === '-') { usbFocused = Math.max(0, usbFocused - 1);             renderUsbModal() }
+// }
 function handleUsbKey(key) {
   if (usbBusy) return
 
@@ -889,7 +985,7 @@ function handleUsbKey(key) {
   if (key === 'Enter') { doUsbCopy(); return }
 
   if (key === '*') {
-    // Select all
+    // Toggle ALL
     if (usbSelected.size === serverFiles.length) {
       usbSelected.clear()
     } else {
@@ -899,24 +995,39 @@ function handleUsbKey(key) {
     return
   }
 
-  // Number keys: toggle that file (1-based; key 1 = file index 0)
   if (/^[0-9]$/.test(key)) {
     const n = parseInt(key)
+
+    // 0 = toggle all
     if (n === 0) {
-      // Move focus to "Alla" row (index 0)
-      usbFocused = 0
-    } else if (n <= serverFiles.length) {
-      const fileIdx = n - 1
+      if (usbSelected.size === serverFiles.length) {
+        usbSelected.clear()
+      } else {
+        serverFiles.forEach((_, i) => usbSelected.add(i))
+      }
+      renderUsbModal()
+      return
+    }
+
+    const fileIdx = n - 1
+    if (fileIdx >= 0 && fileIdx < serverFiles.length) {
       if (usbSelected.has(fileIdx)) usbSelected.delete(fileIdx)
       else usbSelected.add(fileIdx)
     }
+
     renderUsbModal()
     return
   }
 
-  // +/- to move focus
-  if (key === '+') { usbFocused = Math.min(totalRows - 1, usbFocused + 1); renderUsbModal() }
-  if (key === '-') { usbFocused = Math.max(0, usbFocused - 1);             renderUsbModal() }
+  if (key === '+') {
+    usbFocused = Math.min(totalRows - 1, usbFocused + 1)
+    renderUsbModal()
+  }
+
+  if (key === '-') {
+    usbFocused = Math.max(0, usbFocused - 1)
+    renderUsbModal()
+  }
 }
 
 async function doUsbCopy() {
