@@ -189,7 +189,7 @@ export function record(config, startTime) {
     console.log('Startar inspelning: ' + cam.name)
     const proc = spawn('ffmpeg', [
       '-rtsp_transport', 'tcp',
-      '-i', `rtsp://root:${PASS}@${cam.ip}/axis-media/media.amp`,
+      '-i', `rtsp://root:${PASS}@${cam.ip}/axis-media/media.amp?audio=1`,
       '-vcodec', 'copy',
       '-acodec', 'copy',
       '-vsync', 'passthrough',
