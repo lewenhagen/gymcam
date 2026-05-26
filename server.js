@@ -394,7 +394,8 @@ function findUsbMount() {
         }
 
         // 2. Fallback: any removable mounted device
-        if (d.rm && d.mountpoint) {
+        // d.rm is a string ("0"/"1") in older lsblk and boolean in newer — both must be checked
+        if ((d.rm === '1' || d.rm === true) && d.mountpoint) {
           return d.mountpoint
         }
 
