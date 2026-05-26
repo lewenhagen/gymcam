@@ -119,6 +119,25 @@
   </div>
 </div>
 
+<!-- ══ CAMERA CONFIG MODAL ══ -->
+<div id="cam-modal">
+  <div id="cam-box">
+    <div id="cam-header">
+      <div id="cam-title">HANTERA KAMEROR</div>
+      <div id="cam-subtitle">Redigera, lägg till eller ta bort kameror — sidan laddas om vid sparning</div>
+    </div>
+    <div id="cam-body"></div>
+    <div id="cam-footer">
+      <div id="cam-status"></div>
+      <div id="cam-actions">
+        <button id="cam-add-btn" class="cam-btn">+ Lägg till</button>
+        <button id="cam-save-btn" class="cam-btn accent">Spara &amp; ladda om</button>
+        <div class="usb-km"><span class="km-key r">Esc</span><span>Stäng</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 const CAM_COUNT = <%= config.length %>
 const CAM_NAMES = <%- JSON.stringify(config.map(c => c.name)) %>
@@ -146,6 +165,9 @@ let usbFocused   = 0      // index of highlighted row (0 = "Alla")
 let usbSelected  = new Set()
 let usbBusy      = false
 
+// Camera config modal state
+let camConfigOpen = false
+
 // ── DOM ───────────────────────────────────────────────
 const modeBadge  = document.getElementById('mode-badge')
 const recDot     = document.getElementById('rec-dot')
@@ -167,6 +189,9 @@ const confirmModal = document.getElementById('confirm-modal')
 const usbModal   = document.getElementById('usb-modal')
 const usbBody    = document.getElementById('usb-body')
 const usbStatus  = document.getElementById('usb-status')
+const camModal   = document.getElementById('cam-modal')
+const camBody    = document.getElementById('cam-body')
+const camStatus  = document.getElementById('cam-status')
 
 // ── SSE ───────────────────────────────────────────────
 new EventSource('/state-stream').onmessage = e => {
@@ -245,6 +270,7 @@ const MAPS = {
     { k:'0',              c:'',  d:'Grid — alla kameror' },
     { k:'1–'+CAM_COUNT,   c:'',  d:'Byt kamera (fullskärm)' },
     { k:'Enter',          c:'a', d:'Starta inspelning' },
+    { k:'+',              c:'',  d:'Hantera kameror' },
   ],
   RECORDING: [
     { k:'0',              c:'',  d:'Grid-visning' },
@@ -584,6 +610,12 @@ function tickClock() {
 
 // ── Numpad ────────────────────────────────────────────
 document.addEventListener('keydown', e => {
+  // ── Camera config modal: only intercept Escape, let inputs type freely ──
+  if (camConfigOpen) {
+    if (e.key === 'Escape') { e.preventDefault(); closeCamModal() }
+    return
+  }
+
   if (e.code.startsWith('Numpad') || ['Enter','Escape','NumpadEnter','Backspace'].includes(e.code)) {
     e.preventDefault()
   }
@@ -617,6 +649,7 @@ document.addEventListener('keydown', e => {
   // ── Mode-specific ─────────────────────────────────────
   if (mode === 'LIVE') {
     if (key === 'Enter') serverAction('START_REC')
+    if (key === '+') openCamModal()
 
   } else if (mode === 'RECORDING') {
     if (key === 'Enter') serverAction('STOP_PLAY')
@@ -961,12 +994,154 @@ async function doUsbCopy() {
   usbBusy = false
 }
 
+// ── Camera config modal ───────────────────────────────
+function openCamModal() {
+  camConfigOpen = true
+  camStatus.textContent = ''
+  camStatus.className = ''
+  camModal.classList.add('on')
+  loadCamModal()
+}
+
+function closeCamModal() {
+  camConfigOpen = false
+  camModal.classList.remove('on')
+}
+
+async function loadCamModal() {
+  camBody.innerHTML = '<div style="font-family:var(--mono);font-size:.72rem;color:var(--dim);padding:8px 2px">Laddar…</div>'
+  let cameras
+  try {
+    cameras = await fetch('/cameras').then(r => r.json())
+  } catch {
+    camBody.innerHTML = ''
+    camStatus.textContent = 'Kunde inte hämta kameraconfig.'
+    camStatus.className = 'err'
+    return
+  }
+
+  camBody.innerHTML = ''
+
+  // Column labels
+  const labels = document.createElement('div')
+  labels.className = 'cam-col-labels'
+  labels.innerHTML = `
+    <span class="cam-col-num"></span>
+    <span class="cam-col-name">Namn</span>
+    <span class="cam-col-ip">IP-adress</span>
+    <span class="cam-col-del"></span>
+  `
+  camBody.appendChild(labels)
+
+  cameras.forEach((cam, i) => camBody.appendChild(makeCamRow(i + 1, cam.name, cam.ip)))
+}
+
+function makeCamRow(num, name, ip) {
+  const row = document.createElement('div')
+  row.className = 'cam-edit-row'
+
+  const numEl = document.createElement('span')
+  numEl.className = 'cam-edit-num'
+  numEl.textContent = num
+
+  const nameInput = document.createElement('input')
+  nameInput.className = 'cam-edit-name'
+  nameInput.type = 'text'
+  nameInput.placeholder = 'Namn'
+  nameInput.value = name
+
+  const ipInput = document.createElement('input')
+  ipInput.className = 'cam-edit-ip'
+  ipInput.type = 'text'
+  ipInput.placeholder = '0.0.0.0'
+  ipInput.value = ip
+
+  const delBtn = document.createElement('button')
+  delBtn.className = 'cam-edit-del'
+  delBtn.title = 'Ta bort kamera'
+  delBtn.textContent = '✕'
+  delBtn.onclick = () => {
+    row.remove()
+    let n = 1
+    camBody.querySelectorAll('.cam-edit-row').forEach(r => {
+      const num = r.querySelector('.cam-edit-num')
+      if (num) num.textContent = n++
+    })
+  }
+
+  row.append(numEl, nameInput, ipInput, delBtn)
+  return row
+}
+
+document.getElementById('cam-add-btn').onclick = () => {
+  const existing = camBody.querySelectorAll('.cam-edit-name')
+  if (existing.length >= 4) {
+    camStatus.textContent = 'Max 4 kameror stöds.'
+    camStatus.className = 'err'
+    return
+  }
+  camStatus.textContent = ''
+  camStatus.className = ''
+  const row = makeCamRow(existing.length + 1, '', '')
+  camBody.appendChild(row)
+  row.querySelector('.cam-edit-name').focus()
+}
+
+document.getElementById('cam-save-btn').onclick = async () => {
+  const rows = [...camBody.querySelectorAll('.cam-edit-row')]
+    .filter(r => r.querySelector('.cam-edit-name'))
+
+  const cameras = rows.map(r => ({
+    name: r.querySelector('.cam-edit-name').value.trim(),
+    ip:   r.querySelector('.cam-edit-ip').value.trim(),
+  }))
+
+  if (cameras.length === 0) {
+    camStatus.textContent = 'Minst en kamera krävs.'
+    camStatus.className = 'err'
+    return
+  }
+  for (const c of cameras) {
+    if (!c.name) { camStatus.textContent = 'Alla kameror måste ha ett namn.'; camStatus.className = 'err'; return }
+    if (!c.ip)   { camStatus.textContent = 'Alla kameror måste ha en IP-adress.'; camStatus.className = 'err'; return }
+  }
+
+  camStatus.textContent = 'Sparar…'
+  camStatus.className = 'busy'
+  document.getElementById('cam-save-btn').disabled = true
+  document.getElementById('cam-add-btn').disabled  = true
+
+  try {
+    const r = await fetch('/cameras', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cameras),
+    })
+    const d = await r.json()
+    if (r.ok) {
+      camStatus.textContent = '✓ Sparat! Laddar om…'
+      camStatus.className = 'ok'
+      setTimeout(() => window.location.reload(), 900)
+    } else {
+      camStatus.textContent = 'Fel: ' + (d.error || 'Okänt fel')
+      camStatus.className = 'err'
+      document.getElementById('cam-save-btn').disabled = false
+      document.getElementById('cam-add-btn').disabled  = false
+    }
+  } catch (err) {
+    camStatus.textContent = 'Nätverksfel: ' + err.message
+    camStatus.className = 'err'
+    document.getElementById('cam-save-btn').disabled = false
+    document.getElementById('cam-add-btn').disabled  = false
+  }
+}
+
 // ── Click handlers ────────────────────────────────────
 document.querySelectorAll('.grid-cell:not(.dead)').forEach(c =>
-  c.addEventListener('click', () => !usbOpen && switchCam(parseInt(c.dataset.cam)))
+  c.addEventListener('click', () => !usbOpen && !camConfigOpen && switchCam(parseInt(c.dataset.cam)))
 )
 document.querySelectorAll('.cam-row').forEach(r =>
-  r.addEventListener('click', () => !usbOpen && switchCam(parseInt(r.dataset.cam)))
+  r.addEventListener('click', () => !usbOpen && !camConfigOpen && switchCam(parseInt(r.dataset.cam)))
 )
 
 // ── Disk polling ──────────────────────────────────────

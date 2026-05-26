@@ -206,8 +206,9 @@ import { URL } from 'url'
 import { getDiskSpace } from './modules/managecameras.js'
 import { transition, getState, addSSEClient } from './modules/state.js'
 
-const config = JSON.parse(await readFile('./config/cameras.json', 'utf-8'))
+let config = JSON.parse(await readFile('./config/cameras.json', 'utf-8'))
 const __dirname = new URL('.', import.meta.url).pathname
+const CONFIG_PATH = path.join(__dirname, 'config/cameras.json')
 const VIDEO_DIR = path.join(__dirname, 'video')
 
 // Skapa video-mapp om den saknas
@@ -303,6 +304,42 @@ app.get('/livefeed/:camIndex', (req, res) => {
   }
   const cam = config[idx]
   res.json({ url: `http://${cam.ip}/axis-cgi/mjpg/video.cgi?resolution=1280x720&camera=1` })
+})
+
+// ── Camera config ────────────────────────────────────────────────────────────
+app.get('/cameras', (req, res) => {
+  res.json(config)
+})
+
+app.post('/cameras', async (req, res) => {
+  if (getState().mode === 'RECORDING') {
+    return res.status(409).json({ error: 'Kan inte ändra kameror under inspelning.' })
+  }
+
+  const cameras = req.body
+  if (!Array.isArray(cameras) || cameras.length === 0) {
+    return res.status(400).json({ error: 'Minst en kamera krävs.' })
+  }
+  if (cameras.length > 4) {
+    return res.status(400).json({ error: 'Max 4 kameror stöds.' })
+  }
+  for (const c of cameras) {
+    if (!c.name || typeof c.name !== 'string' || !c.name.trim()) {
+      return res.status(400).json({ error: 'Alla kameror måste ha ett namn.' })
+    }
+    if (!c.ip || typeof c.ip !== 'string' || !c.ip.trim()) {
+      return res.status(400).json({ error: 'Alla kameror måste ha en IP-adress.' })
+    }
+  }
+
+  const normalized = cameras.map(c => ({ name: c.name.trim(), ip: c.ip.trim() }))
+  try {
+    await fs.promises.writeFile(CONFIG_PATH, JSON.stringify(normalized, null, 2), 'utf-8')
+    config.splice(0, config.length, ...normalized)
+    res.json({ ok: true })
+  } catch (e) {
+    res.status(500).json({ error: 'Kunde inte spara konfigurationen: ' + e.message })
+  }
 })
 
 // ── USB-export: kopiera valda filer till USB-minne ───────────────────────────
